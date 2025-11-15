@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
-import { TextGeometry } from 'three/examples/jsm/geometries/TextGeometry.js';
-import { FontLoader } from 'three/examples/jsm/loaders/FontLoader.js';
 import { MaterialConfig, RotationState } from '@shared/schema';
+import { createText3DGeometry } from '@/lib/textTo3D';
 
 interface ThreeCanvasProps {
   character: string;
@@ -66,58 +65,45 @@ export function ThreeCanvas({ character, materialConfig, rotation, onRendererRea
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.3);
     scene.add(ambientLight);
 
-    // Load font and create 3D text
-    const fontLoader = new FontLoader();
-    fontLoader.load('https://threejs.org/examples/fonts/helvetiker_regular.typeface.json', (font) => {
-      const geometry = new TextGeometry(character, {
-        font: font,
-        size: 1,
-        depth: materialConfig.thickness,
-        curveSegments: 12,
-        bevelEnabled: true,
-        bevelThickness: 0.03,
-        bevelSize: 0.02,
-        bevelSegments: 5,
-      });
+    // Create 3D text geometry using our custom geometry builder
+    const geometry = createText3DGeometry(character, materialConfig.thickness);
+    geometry.center();
+    geometry.computeVertexNormals();
 
-      geometry.center();
-      geometry.computeVertexNormals();
-
-      // Use MeshPhysicalMaterial for realistic glass with built-in features
-      const glassMaterial = new THREE.MeshPhysicalMaterial({
-        color: new THREE.Color(materialConfig.baseColor),
-        metalness: 0,
-        roughness: materialConfig.roughness,
-        transmission: materialConfig.transmission,
-        thickness: materialConfig.thickness,
-        ior: materialConfig.ior,
-        envMapIntensity: 1.5,
-        clearcoat: 1.0,
-        clearcoatRoughness: 0.1,
-        transparent: true,
-        side: THREE.DoubleSide,
-        opacity: 0.9,
-        // Simulate dispersion effect with these properties
-        reflectivity: 0.9,
-        sheen: materialConfig.dispersion ? 0.5 : 0,
-        sheenRoughness: 0.5,
-        sheenColor: materialConfig.dispersion ? new THREE.Color(0xaaccff) : new THREE.Color(0x000000),
-      });
-
-      if (meshRef.current) {
-        scene.remove(meshRef.current);
-      }
-
-      const mesh = new THREE.Mesh(geometry, glassMaterial);
-      meshRef.current = mesh;
-      scene.add(mesh);
-
-      if (onRendererReady) {
-        onRendererReady(renderer, scene, camera, mesh);
-      }
-
-      setIsLoading(false);
+    // Use MeshPhysicalMaterial for realistic glass with built-in features
+    const glassMaterial = new THREE.MeshPhysicalMaterial({
+      color: new THREE.Color(materialConfig.baseColor),
+      metalness: 0,
+      roughness: materialConfig.roughness,
+      transmission: materialConfig.transmission,
+      thickness: materialConfig.thickness,
+      ior: materialConfig.ior,
+      envMapIntensity: 1.5,
+      clearcoat: 1.0,
+      clearcoatRoughness: 0.1,
+      transparent: true,
+      side: THREE.DoubleSide,
+      opacity: 0.9,
+      // Simulate dispersion effect with these properties
+      reflectivity: 0.9,
+      sheen: materialConfig.dispersion ? 0.5 : 0,
+      sheenRoughness: 0.5,
+      sheenColor: materialConfig.dispersion ? new THREE.Color(0xaaccff) : new THREE.Color(0x000000),
     });
+
+    if (meshRef.current) {
+      scene.remove(meshRef.current);
+    }
+
+    const mesh = new THREE.Mesh(geometry, glassMaterial);
+    meshRef.current = mesh;
+    scene.add(mesh);
+
+    if (onRendererReady) {
+      onRendererReady(renderer, scene, camera, mesh);
+    }
+
+    setIsLoading(false);
 
     // Animation loop
     const animate = () => {
