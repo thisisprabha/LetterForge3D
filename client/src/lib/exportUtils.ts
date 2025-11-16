@@ -11,16 +11,61 @@ export async function exportToPNG(
 ): Promise<Blob> {
   const originalSize = renderer.getSize(new THREE.Vector2());
   const originalPixelRatio = renderer.getPixelRatio();
+  
+  // Type guard for PerspectiveCamera
+  if (!(camera instanceof THREE.PerspectiveCamera)) {
+    throw new Error('Export requires a PerspectiveCamera');
+  }
+  
+  const originalCameraPosition = camera.position.clone();
+  const originalCameraAspect = camera.aspect;
+  const originalCameraFov = camera.fov;
 
+  // Set resolution
   renderer.setSize(resolution, resolution);
   renderer.setPixelRatio(1);
+  
+  // Calculate 20% margin (letter should fill 60% of image)
+  // Frame the mesh to fill 60% of the 1024px image
+  const mesh = scene.children.find(child => child instanceof THREE.Mesh) as THREE.Mesh | undefined;
+  
+  if (mesh) {
+    const box = new THREE.Box3().setFromObject(mesh);
+    const size = box.getSize(new THREE.Vector3());
+    const center = box.getCenter(new THREE.Vector3());
+    
+    // Calculate the distance needed to frame the object with 20% margin
+    // Object should fill 60% of image (0.6 * resolution)
+    const maxDim = Math.max(size.x, size.y, size.z);
+    const targetSize = resolution * 0.6; // 60% of image size (20% margin on all sides)
+    
+    // Calculate camera distance using FOV and object size
+    // distance = (objectSize / 2) / tan(fov / 2) * (imageSize / targetSize)
+    const fovRad = (camera.fov * Math.PI) / 180;
+    const distance = (maxDim / 2) / Math.tan(fovRad / 2) * (resolution / targetSize);
+    
+    // Position camera to center the object, looking at it
+    camera.aspect = 1; // Square aspect ratio for export
+    camera.updateProjectionMatrix();
+    camera.position.set(center.x, center.y, center.z + distance);
+    camera.lookAt(center);
+  } else {
+    // Fallback: maintain square aspect ratio
+    camera.aspect = 1;
+    camera.updateProjectionMatrix();
+  }
 
   renderer.render(scene, camera);
 
   return new Promise((resolve) => {
     renderer.domElement.toBlob((blob) => {
+      // Restore original settings
       renderer.setSize(originalSize.x, originalSize.y);
       renderer.setPixelRatio(originalPixelRatio);
+      camera.position.copy(originalCameraPosition);
+      camera.aspect = originalCameraAspect;
+      camera.fov = originalCameraFov;
+      camera.updateProjectionMatrix();
       
       if (blob) {
         resolve(blob);

@@ -25,7 +25,7 @@ import * as THREE from 'three';
 export default function Home() {
   const { toast } = useToast();
   const [viewMode, setViewMode] = useState<ViewMode>('single');
-  const [selectedCharacter, setSelectedCharacter] = useState('A');
+  const [selectedCharacter, setSelectedCharacter] = useState('0');
   const [materialConfig, setMaterialConfig] = useState<MaterialConfig>(
     materialConfigSchema.parse({})
   );
@@ -185,9 +185,23 @@ export default function Home() {
 
       <main className="flex-1 overflow-hidden">
         {viewMode === 'single' ? (
-          <div className="grid grid-cols-1 lg:grid-cols-[1fr_400px] h-full">
-            <div className="p-4">
-              <Card className="w-full h-full border-2">
+          <div className="grid grid-cols-[250px_1fr_350px] h-full">
+            {/* Left: Character Selector */}
+            <div className="border-r border-border overflow-y-auto">
+              <div className="p-4">
+                <CharacterSelector
+                  selectedCharacter={selectedCharacter}
+                  onChange={(char) => {
+                    setSelectedCharacter(char);
+                    // Don't reset rotation - keep global rotation
+                  }}
+                />
+              </div>
+            </div>
+
+            {/* Center: Canvas (Portrait style) */}
+            <div className="p-4 flex items-center justify-center">
+              <Card className="w-full h-full max-w-2xl border-2">
                 <ThreeCanvas
                   character={selectedCharacter}
                   materialConfig={materialConfig}
@@ -197,20 +211,14 @@ export default function Home() {
               </Card>
             </div>
 
+            {/* Right: Controls (Rotation | Material | Export) */}
             <div className="border-l border-border overflow-y-auto">
               <div className="p-6 space-y-6">
-                <CharacterSelector
-                  selectedCharacter={selectedCharacter}
-                  onChange={setSelectedCharacter}
-                />
+                <RotationControls rotation={rotation} onChange={setRotation} />
 
                 <Separator />
 
                 <MaterialControls config={materialConfig} onChange={setMaterialConfig} />
-
-                <Separator />
-
-                <RotationControls rotation={rotation} onChange={setRotation} />
 
                 <Separator />
 
@@ -236,6 +244,7 @@ export default function Home() {
             rotation={rotation}
             onCharacterSelect={(char) => {
               setSelectedCharacter(char);
+              // Don't reset rotation - keep global rotation
               setViewMode('single');
             }}
           />

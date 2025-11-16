@@ -8,6 +8,7 @@ export const materialConfigSchema = z.object({
   thickness: z.number().min(0.1).max(2.0).default(0.5),
   dispersion: z.boolean().default(true),
   transmission: z.number().min(0).max(1).default(1.0),
+  edgeSmooth: z.boolean().default(true), // Enable/disable edge smoothing/beveling
 });
 
 export type MaterialConfig = z.infer<typeof materialConfigSchema>;
@@ -21,8 +22,8 @@ export const exportConfigSchema = z.object({
 
 export type ExportConfig = z.infer<typeof exportConfigSchema>;
 
-// Character set
-export const CHARACTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789".split("");
+// Character set - Only numbers for now (A-Z hidden)
+export const CHARACTERS = "0123456789".split("");
 
 // Rotation state
 export const rotationStateSchema = z.object({

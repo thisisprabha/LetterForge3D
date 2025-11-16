@@ -114,6 +114,16 @@ export function MaterialControls({ config, onChange }: MaterialControlsProps) {
               data-testid="switch-dispersion"
             />
           </div>
+
+          <div className="flex items-center justify-between pt-2">
+            <Label htmlFor="edgeSmooth" className="text-sm text-muted-foreground">Edge Smoothing</Label>
+            <Switch
+              id="edgeSmooth"
+              checked={config.edgeSmooth ?? true}
+              onCheckedChange={(checked) => onChange({ ...config, edgeSmooth: checked })}
+              data-testid="switch-edge-smooth"
+            />
+          </div>
         </div>
       </div>
     </div>

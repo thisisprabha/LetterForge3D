@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
+import { EXRLoader } from 'three/examples/jsm/loaders/EXRLoader.js';
 import { MaterialConfig, RotationState } from '@shared/schema';
 import { createText3DGeometry } from '@/lib/textTo3D';
 
@@ -33,7 +34,8 @@ export function ThreeCanvas({ character, materialConfig, rotation, onRendererRea
     sceneRef.current = scene;
 
     const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 1000);
-    camera.position.set(0, 0, 5);
+    camera.position.set(0, 0, 6); // Adjusted for better framing
+    camera.lookAt(0, 0, 0);
     cameraRef.current = camera;
 
     const renderer = new THREE.WebGLRenderer({
@@ -45,75 +47,98 @@ export function ThreeCanvas({ character, materialConfig, rotation, onRendererRea
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.0;
+    renderer.toneMappingExposure = 1.2;
     container.appendChild(renderer.domElement);
     rendererRef.current = renderer;
 
-    // Three-point studio lighting
-    const keyLight = new THREE.DirectionalLight(0xffffff, 1.5);
+    // Load HDR environment map from EXR file
+    const pmremGenerator = new THREE.PMREMGenerator(renderer);
+    pmremGenerator.compileEquirectangularShader();
+    
+    const exrLoader = new EXRLoader();
+    exrLoader.load('/studio_small_03_4k.exr', (texture) => {
+      texture.mapping = THREE.EquirectangularReflectionMapping;
+      texture.colorSpace = THREE.LinearSRGBColorSpace;
+      
+      const envRenderTarget = pmremGenerator.fromEquirectangular(texture);
+      scene.environment = envRenderTarget.texture;
+      texture.dispose();
+      
+      // Update material if it exists
+      if (meshRef.current && meshRef.current.material) {
+        const material = meshRef.current.material as THREE.ShaderMaterial | THREE.MeshPhysicalMaterial;
+        if ('envMap' in material) {
+          material.envMap = envRenderTarget.texture;
+          material.needsUpdate = true;
+        }
+      }
+    });
+
+    // Three-point studio lighting - increased brightness
+    const keyLight = new THREE.DirectionalLight(0xffffff, 2.5);
     keyLight.position.set(5, 5, 5);
     scene.add(keyLight);
 
-    const fillLight = new THREE.DirectionalLight(0xffffff, 0.5);
+    const fillLight = new THREE.DirectionalLight(0xffffff, 1.0);
     fillLight.position.set(-5, 0, 3);
     scene.add(fillLight);
 
-    const backLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    const backLight = new THREE.DirectionalLight(0xffffff, 1.5);
     backLight.position.set(0, -5, -5);
     scene.add(backLight);
 
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.3);
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
     scene.add(ambientLight);
 
-    // Create 3D text geometry using our custom geometry builder
-    const geometry = createText3DGeometry(character, materialConfig.thickness);
-    geometry.center();
-    geometry.computeVertexNormals();
+    // Create 3D text geometry using SVG paths
+    try {
+      const geometry = createText3DGeometry(character, materialConfig.thickness, materialConfig.edgeSmooth ?? true);
+      geometry.center();
+      geometry.computeVertexNormals();
 
-    // Use MeshPhysicalMaterial for realistic glass with built-in features
-    const glassMaterial = new THREE.MeshPhysicalMaterial({
-      color: new THREE.Color(materialConfig.baseColor),
-      metalness: 0,
-      roughness: materialConfig.roughness,
-      transmission: materialConfig.transmission,
-      thickness: materialConfig.thickness,
-      ior: materialConfig.ior,
-      envMapIntensity: 1.5,
-      clearcoat: 1.0,
-      clearcoatRoughness: 0.1,
-      transparent: true,
-      side: THREE.DoubleSide,
-      opacity: 0.9,
-      // Simulate dispersion effect with these properties
-      reflectivity: 0.9,
-      sheen: materialConfig.dispersion ? 0.5 : 0,
-      sheenRoughness: 0.5,
-      sheenColor: materialConfig.dispersion ? new THREE.Color(0xaaccff) : new THREE.Color(0x000000),
-    });
+      // Use MeshPhysicalMaterial for physically accurate glass
+      const glassMaterial = new THREE.MeshPhysicalMaterial({
+        color: new THREE.Color(materialConfig.baseColor),
+        metalness: 0,
+        roughness: materialConfig.roughness,
+        transmission: materialConfig.transmission,
+        thickness: materialConfig.thickness,
+        ior: materialConfig.ior,
+        envMapIntensity: 3.0,
+        clearcoat: 1.0,
+        clearcoatRoughness: 0.1,
+        transparent: true,
+        side: THREE.DoubleSide,
+        opacity: 1.0,
+        reflectivity: 0.95,
+        sheen: materialConfig.dispersion ? 0.5 : 0,
+        sheenRoughness: 0.5,
+        sheenColor: materialConfig.dispersion ? new THREE.Color(0xaaccff) : new THREE.Color(0x000000),
+        specularIntensity: 1.0,
+        specularColor: new THREE.Color(0xffffff),
+      });
 
-    if (meshRef.current) {
-      scene.remove(meshRef.current);
+      if (meshRef.current) {
+        scene.remove(meshRef.current);
+      }
+
+      const mesh = new THREE.Mesh(geometry, glassMaterial);
+      meshRef.current = mesh;
+      scene.add(mesh);
+
+      if (onRendererReady) {
+        onRendererReady(renderer, scene, camera, mesh);
+      }
+
+      setIsLoading(false);
+    } catch (error) {
+      console.error('Error creating text geometry:', error);
+      setIsLoading(false);
     }
-
-    const mesh = new THREE.Mesh(geometry, glassMaterial);
-    meshRef.current = mesh;
-    scene.add(mesh);
-
-    if (onRendererReady) {
-      onRendererReady(renderer, scene, camera, mesh);
-    }
-
-    setIsLoading(false);
 
     // Animation loop
     const animate = () => {
       animationIdRef.current = requestAnimationFrame(animate);
-      
-      if (meshRef.current) {
-        meshRef.current.rotation.x = rotation.x;
-        meshRef.current.rotation.y = rotation.y;
-      }
-
       renderer.render(scene, camera);
     };
     animate();
@@ -138,16 +163,33 @@ export function ThreeCanvas({ character, materialConfig, rotation, onRendererRea
         container.removeChild(renderer.domElement);
       }
     };
-  }, [character, materialConfig.thickness]);
+  }, [character, materialConfig.thickness, materialConfig.edgeSmooth]);
+
+  // Apply rotation when character changes (don't reset, use current rotation)
+  useEffect(() => {
+    if (meshRef.current) {
+      meshRef.current.rotation.x = rotation.x;
+      meshRef.current.rotation.y = rotation.y;
+    }
+  }, [character, rotation]);
+
+  // Update rotation in real-time
+  useEffect(() => {
+    if (meshRef.current) {
+      meshRef.current.rotation.x = rotation.x;
+      meshRef.current.rotation.y = rotation.y;
+    }
+  }, [rotation]);
 
   // Update material properties
   useEffect(() => {
-    if (meshRef.current && meshRef.current.material) {
-      const material = meshRef.current.material as THREE.MeshPhysicalMaterial;
+    if (meshRef.current && meshRef.current.material instanceof THREE.MeshPhysicalMaterial) {
+      const material = meshRef.current.material;
       material.color = new THREE.Color(materialConfig.baseColor);
       material.roughness = materialConfig.roughness;
       material.transmission = materialConfig.transmission;
       material.ior = materialConfig.ior;
+      material.envMapIntensity = 2.0;
       material.sheen = materialConfig.dispersion ? 0.5 : 0;
       material.sheenColor = materialConfig.dispersion ? new THREE.Color(0xaaccff) : new THREE.Color(0x000000);
       material.needsUpdate = true;
