@@ -15,9 +15,16 @@ export type MaterialConfig = z.infer<typeof materialConfigSchema>;
 
 // Export configuration
 export const exportConfigSchema = z.object({
-  format: z.enum(["png", "usdz"]).default("png"),
+  format: z.enum(["png", "usdz", "png-animated"]).default("png"),
   resolution: z.number().default(1024),
   transparent: z.boolean().default(true),
+  // Animation settings
+  animationType: z.enum(["rotation", "tilt", "both"]).default("rotation"),
+  rotationStart: z.number().default(0),
+  rotationEnd: z.number().default(-90),
+  tiltStart: z.number().default(0),
+  tiltEnd: z.number().default(45),
+  frameCount: z.number().default(30),
 });
 
 export type ExportConfig = z.infer<typeof exportConfigSchema>;

@@ -19,7 +19,7 @@ import {
   materialConfigSchema,
   exportConfigSchema,
 } from '@shared/schema';
-import { exportToPNG, exportToUSDZ, batchExportPNG, downloadBlob } from '@/lib/exportUtils';
+import { exportToPNG, exportToUSDZ, batchExportPNG, batchExportUSDZ, exportAnimatedPNG, downloadBlob } from '@/lib/exportUtils';
 import * as THREE from 'three';
 
 export default function Home() {
@@ -64,6 +64,7 @@ export default function Home() {
     }
 
     setIsExporting(true);
+    setExportProgress('Exporting...');
 
     try {
       if (exportConfig.format === 'png') {
@@ -79,11 +80,42 @@ export default function Home() {
           title: 'Export Successful',
           description: `${selectedCharacter}.png has been downloaded.`,
         });
+      } else if (exportConfig.format === 'png-animated') {
+        if (!meshRef.current) {
+          throw new Error('No mesh to export');
+        }
+        setExportProgress('Generating animation frames...');
+        const blob = await exportAnimatedPNG(
+          rendererRef.current,
+          sceneRef.current,
+          cameraRef.current,
+          meshRef.current,
+          `glass-letter-${selectedCharacter}-animated.zip`,
+          exportConfig.resolution,
+          exportConfig.animationType,
+          exportConfig.rotationStart,
+          exportConfig.rotationEnd,
+          exportConfig.tiltStart,
+          exportConfig.tiltEnd,
+          exportConfig.frameCount
+        );
+        const animationTypeLabel = exportConfig.animationType === 'rotation' ? 'rotation' : 
+                                   exportConfig.animationType === 'tilt' ? 'tilt' : 'both';
+        downloadBlob(blob, `glass-letter-${selectedCharacter}-${animationTypeLabel}.zip`);
+        toast({
+          title: 'Export Successful',
+          description: `${exportConfig.animationType} animation (${exportConfig.frameCount} frames) exported successfully.`,
+        });
       } else {
         const blob = await exportToUSDZ(
           meshRef.current,
           `${selectedCharacter}.usdz`,
-          materialConfig
+          {
+            ior: materialConfig.ior,
+            roughness: materialConfig.roughness,
+            transmission: materialConfig.transmission,
+            baseColor: materialConfig.baseColor,
+          }
         );
         downloadBlob(blob, `glass-letter-${selectedCharacter}.usdz`);
         toast({
@@ -99,6 +131,7 @@ export default function Home() {
       });
     } finally {
       setIsExporting(false);
+      setExportProgress('');
     }
   };
 
@@ -116,31 +149,64 @@ export default function Home() {
     setExportProgress('Starting batch export...');
 
     try {
-      const renderCharacter = async (char: string): Promise<Blob> => {
-        setSelectedCharacter(char);
-        await new Promise(resolve => setTimeout(resolve, 200));
+      if (exportConfig.format === 'png') {
+        const renderCharacter = async (char: string): Promise<Blob> => {
+          setSelectedCharacter(char);
+          await new Promise(resolve => setTimeout(resolve, 200));
 
-        if (!rendererRef.current || !sceneRef.current || !cameraRef.current) {
-          throw new Error('Renderer not available');
-        }
+          if (!rendererRef.current || !sceneRef.current || !cameraRef.current) {
+            throw new Error('Renderer not available');
+          }
 
-        return exportToPNG(
-          rendererRef.current,
-          sceneRef.current,
-          cameraRef.current,
-          `${char}.png`,
-          exportConfig.resolution
-        );
-      };
+          return exportToPNG(
+            rendererRef.current,
+            sceneRef.current,
+            cameraRef.current,
+            `${char}.png`,
+            exportConfig.resolution
+          );
+        };
 
-      await batchExportPNG(CHARACTERS, renderCharacter, (current, total) => {
-        setExportProgress(`Exporting ${current}/${total}...`);
-      });
+        await batchExportPNG(CHARACTERS, renderCharacter, (current, total) => {
+          setExportProgress(`Exporting ${current}/${total}...`);
+        });
 
-      toast({
-        title: 'Batch Export Complete',
-        description: `All ${CHARACTERS.length} characters exported successfully.`,
-      });
+        toast({
+          title: 'Batch Export Complete',
+          description: `All ${CHARACTERS.length} characters exported successfully.`,
+        });
+      } else if (exportConfig.format === 'usdz') {
+        const exportCharacter = async (char: string): Promise<Blob> => {
+          setSelectedCharacter(char);
+          await new Promise(resolve => setTimeout(resolve, 200));
+
+          if (!meshRef.current) {
+            throw new Error('No mesh to export');
+          }
+
+          return exportToUSDZ(
+            meshRef.current,
+            `${char}.usdz`,
+            {
+              ior: materialConfig.ior,
+              roughness: materialConfig.roughness,
+              transmission: materialConfig.transmission,
+              baseColor: materialConfig.baseColor,
+            }
+          );
+        };
+
+        await batchExportUSDZ(CHARACTERS, exportCharacter, (current, total) => {
+          setExportProgress(`Exporting ${current}/${total}...`);
+        });
+
+        toast({
+          title: 'Batch Export Complete',
+          description: `All ${CHARACTERS.length} characters exported successfully.`,
+        });
+      } else {
+        throw new Error('Animated PNG batch export not supported. Use single export for animations.');
+      }
     } catch (error) {
       toast({
         title: 'Batch Export Failed',
