@@ -97,8 +97,10 @@ export function ThreeCanvas({ character, materialConfig, rotation, onRendererRea
       geometry.computeVertexNormals();
 
       // Use MeshPhysicalMaterial for physically accurate glass
+      // When noColor is true, use white (no tint) for completely clear glass
+      const glassColor = materialConfig.noColor ? '#ffffff' : materialConfig.baseColor;
       const glassMaterial = new THREE.MeshPhysicalMaterial({
-        color: new THREE.Color(materialConfig.baseColor),
+        color: new THREE.Color(glassColor),
         metalness: 0,
         roughness: materialConfig.roughness,
         transmission: materialConfig.transmission,
@@ -185,7 +187,9 @@ export function ThreeCanvas({ character, materialConfig, rotation, onRendererRea
   useEffect(() => {
     if (meshRef.current && meshRef.current.material instanceof THREE.MeshPhysicalMaterial) {
       const material = meshRef.current.material;
-      material.color = new THREE.Color(materialConfig.baseColor);
+      // When noColor is true, use white (no tint) for completely clear glass
+      const glassColor = materialConfig.noColor ? '#ffffff' : materialConfig.baseColor;
+      material.color = new THREE.Color(glassColor);
       material.roughness = materialConfig.roughness;
       material.transmission = materialConfig.transmission;
       material.ior = materialConfig.ior;

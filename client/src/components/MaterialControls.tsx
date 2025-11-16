@@ -25,7 +25,17 @@ export function MaterialControls({ config, onChange }: MaterialControlsProps) {
                 value={config.baseColor}
                 onChange={(e) => onChange({ ...config, baseColor: e.target.value })}
                 className="w-16 h-9 p-1 cursor-pointer"
+                disabled={config.noColor}
                 data-testid="input-base-color"
+              />
+            </div>
+            <div className="flex items-center justify-between pt-1">
+              <Label htmlFor="noColor" className="text-sm text-muted-foreground">No Color / Clear</Label>
+              <Switch
+                id="noColor"
+                checked={config.noColor ?? false}
+                onCheckedChange={(checked) => onChange({ ...config, noColor: checked })}
+                data-testid="switch-no-color"
               />
             </div>
           </div>

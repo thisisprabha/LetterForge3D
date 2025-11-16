@@ -11,6 +11,12 @@ export async function exportToPNG(
 ): Promise<Blob> {
   const originalSize = renderer.getSize(new THREE.Vector2());
   const originalPixelRatio = renderer.getPixelRatio();
+  const originalBackground = scene.background;
+  
+  // Store original clear settings
+  const originalClearColor = new THREE.Color();
+  const originalClearAlpha = renderer.getClearAlpha();
+  renderer.getClearColor(originalClearColor);
   
   // Type guard for PerspectiveCamera
   if (!(camera instanceof THREE.PerspectiveCamera)) {
@@ -21,13 +27,28 @@ export async function exportToPNG(
   const originalCameraAspect = camera.aspect;
   const originalCameraFov = camera.fov;
 
+  // Set transparent background for export
+  // Environment map (scene.environment) remains active for glass reflections
+  scene.background = null;
+  renderer.setClearColor(0x000000, 0); // Transparent black
+  renderer.setClearAlpha(0); // Ensure alpha is 0
+
   // Set resolution
   renderer.setSize(resolution, resolution);
   renderer.setPixelRatio(1);
   
+  // Ensure material uses environment map for glass reflections
+  const mesh = scene.children.find(child => child instanceof THREE.Mesh) as THREE.Mesh | undefined;
+  if (mesh && mesh.material && scene.environment) {
+    const material = mesh.material as THREE.MeshPhysicalMaterial;
+    if ('envMap' in material) {
+      material.envMap = scene.environment;
+      material.needsUpdate = true;
+    }
+  }
+  
   // Calculate 20% margin (letter should fill 60% of image)
   // Frame the mesh to fill 60% of the 1024px image
-  const mesh = scene.children.find(child => child instanceof THREE.Mesh) as THREE.Mesh | undefined;
   
   if (mesh) {
     const box = new THREE.Box3().setFromObject(mesh);
@@ -55,13 +76,48 @@ export async function exportToPNG(
     camera.updateProjectionMatrix();
   }
 
-  renderer.render(scene, camera);
+  // Use render target with alpha to ensure transparency
+  const renderTarget = new THREE.WebGLRenderTarget(resolution, resolution, {
+    format: THREE.RGBAFormat,
+    type: THREE.UnsignedByteType,
+    alpha: true,
+    antialias: true,
+  });
 
+  // Render to target
+  renderer.setRenderTarget(renderTarget);
+  renderer.render(scene, camera);
+  renderer.setRenderTarget(null);
+
+  // Read pixels from render target
+  const pixels = new Uint8Array(resolution * resolution * 4);
+  renderer.readRenderTargetPixels(renderTarget, 0, 0, resolution, resolution, pixels);
+
+  // Create canvas with alpha
+  const canvas = document.createElement('canvas');
+  canvas.width = resolution;
+  canvas.height = resolution;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) {
+    throw new Error('Could not get canvas context');
+  }
+
+  // Put pixel data into canvas
+  const imageData = ctx.createImageData(resolution, resolution);
+  imageData.data.set(pixels);
+  ctx.putImageData(imageData, 0, 0);
+
+  // Convert to blob with alpha
   return new Promise((resolve) => {
-    renderer.domElement.toBlob((blob) => {
+    canvas.toBlob((blob) => {
+      // Cleanup
+      renderTarget.dispose();
+      
       // Restore original settings
       renderer.setSize(originalSize.x, originalSize.y);
       renderer.setPixelRatio(originalPixelRatio);
+      scene.background = originalBackground;
+      renderer.setClearColor(originalClearColor, originalClearAlpha);
       camera.position.copy(originalCameraPosition);
       camera.aspect = originalCameraAspect;
       camera.fov = originalCameraFov;
@@ -312,6 +368,12 @@ export async function exportAnimatedPNG(
   const originalSize = renderer.getSize(new THREE.Vector2());
   const originalPixelRatio = renderer.getPixelRatio();
   const originalMeshRotation = mesh.rotation.clone();
+  const originalBackground = scene.background;
+  
+  // Store original clear settings
+  const originalClearColor = new THREE.Color();
+  const originalClearAlpha = renderer.getClearAlpha();
+  renderer.getClearColor(originalClearColor);
   
   // Type guard for PerspectiveCamera
   if (!(camera instanceof THREE.PerspectiveCamera)) {
@@ -322,9 +384,24 @@ export async function exportAnimatedPNG(
   const originalCameraAspect = camera.aspect;
   const originalCameraFov = camera.fov;
 
+  // Set transparent background for export
+  // Environment map (scene.environment) remains active for glass reflections
+  scene.background = null;
+  renderer.setClearColor(0x000000, 0); // Transparent black
+  renderer.setClearAlpha(0); // Ensure alpha is 0
+
   // Set resolution
   renderer.setSize(resolution, resolution);
   renderer.setPixelRatio(1);
+  
+  // Ensure material uses environment map for glass reflections
+  if (mesh.material && scene.environment) {
+    const material = mesh.material as THREE.MeshPhysicalMaterial;
+    if ('envMap' in material) {
+      material.envMap = scene.environment;
+      material.needsUpdate = true;
+    }
+  }
   
   // Frame the mesh
   const box = new THREE.Box3().setFromObject(mesh);
@@ -368,13 +445,42 @@ export async function exportAnimatedPNG(
     // Small delay to ensure mesh updates
     await new Promise(resolve => setTimeout(resolve, 10));
     
-    // Render frame
+    // Use render target with alpha to ensure transparency
+    const renderTarget = new THREE.WebGLRenderTarget(resolution, resolution, {
+      format: THREE.RGBAFormat,
+      type: THREE.UnsignedByteType,
+      alpha: true,
+      antialias: true,
+    });
+
+    // Render to target
+    renderer.setRenderTarget(renderTarget);
     renderer.render(scene, camera);
-    
-    // Capture frame
+    renderer.setRenderTarget(null);
+
+    // Read pixels from render target
+    const pixels = new Uint8Array(resolution * resolution * 4);
+    renderer.readRenderTargetPixels(renderTarget, 0, 0, resolution, resolution, pixels);
+
+    // Create canvas with alpha
+    const canvas = document.createElement('canvas');
+    canvas.width = resolution;
+    canvas.height = resolution;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) {
+      throw new Error('Could not get canvas context');
+    }
+
+    // Put pixel data into canvas
+    const imageData = ctx.createImageData(resolution, resolution);
+    imageData.data.set(pixels);
+    ctx.putImageData(imageData, 0, 0);
+
+    // Capture frame with alpha
     const blob = await new Promise<Blob>((resolve) => {
-      renderer.domElement.toBlob((blob) => {
+      canvas.toBlob((blob) => {
         if (blob) resolve(blob);
+        renderTarget.dispose();
       }, 'image/png');
     });
     
@@ -384,6 +490,8 @@ export async function exportAnimatedPNG(
   // Restore original settings
   renderer.setSize(originalSize.x, originalSize.y);
   renderer.setPixelRatio(originalPixelRatio);
+  scene.background = originalBackground;
+  renderer.setClearColor(originalClearColor, originalClearAlpha);
   camera.position.copy(originalCameraPosition);
   camera.aspect = originalCameraAspect;
   camera.fov = originalCameraFov;

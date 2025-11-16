@@ -3,6 +3,7 @@ import { z } from "zod";
 // Material configuration for glass rendering
 export const materialConfigSchema = z.object({
   baseColor: z.string().default("#ffffff"),
+  noColor: z.boolean().default(false), // When true, glass has no color tint (completely clear)
   ior: z.number().min(1.4).max(1.6).default(1.5),
   roughness: z.number().min(0).max(0.3).default(0.02),
   thickness: z.number().min(0.1).max(2.0).default(0.5),
